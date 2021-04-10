@@ -1,0 +1,17 @@
+[package]
+name = "residua-mutf8"
+version = "0.4.2"
+authors = ["Sean C. Roach <me@seancroach.dev>"]
+edition = "2018"
+
+description = "Convert between MUTF-8 and UTF-8."
+repository = "https://github.com/residua/mutf8"
+license = "MIT"
+
+categories = ["encoding"]
+
+[lib]
+name = "mutf8"
+
+[dependencies]
+residua-cesu8 = "0.4"
