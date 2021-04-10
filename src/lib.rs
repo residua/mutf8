@@ -163,7 +163,11 @@ const NULL_PAIR: [u8; 2] = [0xC0, 0x80];
 /// required to encode the string slice.
 pub fn encoded_len(str: &str) -> usize {
     let mut len = cesu8::encoded_len(str);
-    str.as_bytes().iter().for_each(|&b| if b == NULL_CODE_POINT { len += 1 });
+    str.as_bytes().iter().for_each(|&b| {
+        if b == NULL_CODE_POINT {
+            len += 1
+        }
+    });
     len
 }
 
