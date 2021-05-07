@@ -1,4 +1,4 @@
-# MUTF-8 &nbsp;[![Build Status]][actions] [![Latest Version]][crates.io]
+# residua-mutf8 &nbsp;[![Build Status]][actions] [![Latest Version]][crates.io]
 
 [Build Status]: https://img.shields.io/github/workflow/status/residua/mutf8/CI?logo=github
 [actions]: https://github.com/residua/mutf8/actions/workflows/ci.yml
