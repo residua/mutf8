@@ -14,4 +14,4 @@ categories = ["encoding"]
 name = "mutf8"
 
 [dependencies]
-residua-cesu8 = "0.4"
+residua-cesu8 = "0.6.0"
