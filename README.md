@@ -1,9 +1,9 @@
 # residua-mutf8
 
+A simple library for converting between MUTF-8 and UTF-8.
+
 [![Build Status]][actions]
 [![Latest Version]][crates.io]
-
-A simple library for converting between MUTF-8 and UTF-8.
 
 [Build Status]: https://img.shields.io/github/workflow/status/residua/mutf8/ci?logo=github
 [actions]: https://github.com/residua/mutf8/actions/workflows/ci.yml
@@ -12,7 +12,7 @@ A simple library for converting between MUTF-8 and UTF-8.
 
 ## Documentation
 
-View the full reference on `docs.rs` [here](https://docs.rs/residua-mutf8)
+View the full reference on `docs.rs` [here](https://docs.rs/residua-mutf8).
 
 ## Usage
 
