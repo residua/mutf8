@@ -1,7 +1,7 @@
 //! A library for converting between MUTF-8 and UTF-8.
 //!
 //! MUTF-8 is the same as CESU-8 except for its handling of embedded null
-//! characters. This library builds on top of the residua-cesu8 crate found
+//! characters. This library builds on top of the `residua-cesu8` crate found
 //! [here][residua-cesu8].
 //!
 //! [residua-cesu8]: https://github.com/residua/cesu8
@@ -27,8 +27,9 @@
 //! assert_eq!(to_mutf8(str), Cow::Borrowed(mutf8_data))
 //! ```
 
-use std::borrow::Cow;
-use std::str::from_utf8;
+#![deny(clippy::pedantic)]
+
+use std::{borrow::Cow, error::Error, fmt, str::from_utf8};
 
 use cesu8::{cesu8_len, from_cesu8, is_valid_cesu8, to_cesu8};
 
@@ -46,9 +47,9 @@ use cesu8::{cesu8_len, from_cesu8, is_valid_cesu8, to_cesu8};
 /// If the slice of bytes is found not to be valid MUTF-8 data, `decode()`
 /// returns `Err(DecodingError)` to signify that an error has occured.
 ///
-/// # Panics
+/// # Errors
 ///
-/// Panics if the slice of bytes is found not to be valid MUTF-8 data.
+/// Returns [`DecodingError`] if the input is invalid MUTF-8 data.
 ///
 /// # Examples
 ///
@@ -73,19 +74,25 @@ use cesu8::{cesu8_len, from_cesu8, is_valid_cesu8, to_cesu8};
 /// // code point which becomes a null character.
 /// assert_eq!(from_mutf8(mutf8_data), Cow::Borrowed(str));
 /// ```
-pub fn from_mutf8(bytes: &[u8]) -> Cow<str> {
-    if let Ok(str) = from_utf8(bytes) {
-        return Cow::Borrowed(str);
-    }
+#[inline]
+pub fn from_mutf8(bytes: &[u8]) -> Result<Cow<str>, DecodingError> {
+    from_utf8(bytes)
+        .map(Cow::Borrowed)
+        .or_else(|_| decode_mutf8(bytes).map(Cow::Owned))
+}
 
+#[inline(never)]
+#[cold]
+fn decode_mutf8(bytes: &[u8]) -> Result<String, DecodingError> {
     macro_rules! err {
         () => {{
-            panic!("invalid MUTF-8 data");
+            return Err(DecodingError);
         }};
     }
 
     let mut decoded = Vec::with_capacity(bytes.len());
     let mut iter = bytes.iter();
+
     while let Some(&byte) = iter.next() {
         let value = if byte == NULL_PAIR[0] {
             match iter.next() {
@@ -103,8 +110,9 @@ pub fn from_mutf8(bytes: &[u8]) -> Cow<str> {
         decoded.push(value);
     }
 
-    // TODO: fix possibly confusing panic message?
-    Cow::Owned(from_cesu8(&decoded).to_string())
+    from_cesu8(&decoded)
+        .map(Cow::into_owned)
+        .map_err(From::from)
 }
 
 /// Converts a string slice to MUTF-8 bytes.
@@ -140,11 +148,20 @@ pub fn from_mutf8(bytes: &[u8]) -> Cow<str> {
 /// // MUTF-8.
 /// assert_eq!(to_mutf8(str), mutf8_data);
 /// ```
+#[must_use]
+#[inline]
 pub fn to_mutf8(s: &str) -> Cow<[u8]> {
     if is_valid_mutf8(s) {
-        return Cow::Borrowed(s.as_bytes());
+        Cow::Borrowed(s.as_bytes())
+    } else {
+        Cow::Owned(encode_mutf8(s))
     }
+}
 
+#[must_use]
+#[inline(never)]
+#[cold]
+fn encode_mutf8(s: &str) -> Vec<u8> {
     let mut encoded = Vec::with_capacity(mutf8_len(s));
 
     for &byte in to_cesu8(s).iter() {
@@ -155,7 +172,7 @@ pub fn to_mutf8(s: &str) -> Cow<[u8]> {
         }
     }
 
-    Cow::Owned(encoded)
+    encoded
 }
 
 /// The pair of bytes the null code point (`0x00`) is represented by in MUTF-8.
@@ -163,11 +180,12 @@ const NULL_PAIR: [u8; 2] = [0xC0, 0x80];
 
 /// Given a string slice, this function returns how many bytes in MUTF-8 are
 /// required to encode the string slice.
+#[must_use]
 pub fn mutf8_len(s: &str) -> usize {
     let mut len = cesu8_len(s);
     s.as_bytes().iter().for_each(|&b| {
         if b == NULL_CODE_POINT {
-            len += 1
+            len += 1;
         }
     });
     len
@@ -197,9 +215,34 @@ pub fn mutf8_len(s: &str) -> usize {
 /// // The use of a null character IS NOT valid MUTF-8.
 /// assert!(!is_valid_mutf8("\0"));
 /// ```
+#[must_use]
+#[inline]
 pub fn is_valid_mutf8(s: &str) -> bool {
     !s.contains(NULL_CHAR) && is_valid_cesu8(s)
 }
 
 const NULL_CODE_POINT: u8 = 0x00;
 const NULL_CHAR: char = '\0';
+
+/// An error thrown by [`from_mutf8`] when the input is invalid MUTF-8 data.
+///
+/// This type does not support transmission of an error other than that an error
+/// occurred.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DecodingError;
+
+impl fmt::Display for DecodingError {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("invalid MUTF-8 data")
+    }
+}
+
+impl From<cesu8::DecodingError> for DecodingError {
+    #[inline]
+    fn from(_: cesu8::DecodingError) -> Self {
+        DecodingError
+    }
+}
+
+impl Error for DecodingError {}
