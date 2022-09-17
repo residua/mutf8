@@ -26,6 +26,31 @@ residua-mutf8 = "1"
 
 [crates]: https://crates.io/crates/residua-mutf8
 
+## Examples
+
+Basic usage
+
+```rust
+use std::borrow::Cow;
+use mutf8::{to_mutf8, from_mutf8};
+
+let str = "Hello, world!";
+// 16-bit Unicode characters are the same in UTF-8 and MUTF-8:
+assert_eq!(to_mutf8(str), Cow::Borrowed(str.as_bytes()));
+assert_eq!(from_mutf8(str.as_bytes()), Ok(Cow::Borrowed(str)));
+
+let str = "\u{10401}";
+let mutf8_data = &[0xED, 0xA0, 0x81, 0xED, 0xB0, 0x81];
+// 'mutf8_data' is a byte slice containing a 6-byte surrogate pair which
+// becomes a 4-byte UTF-8 character.
+assert_eq!(from_mutf8(mutf8_data), Ok(Cow::Owned(str.to_string())));
+
+let str = "\0";
+let mutf8_data = &[0xC0, 0x80];
+// 'str' is a null character which becomes a two-byte MUTF-8 representation.
+assert_eq!(to_mutf8(str), Cow::<[u8]>::Owned(mutf8_data.to_vec()));
+```
+
 ## License
 
 Licensed under either of

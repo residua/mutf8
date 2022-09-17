@@ -6,6 +6,10 @@
 //!
 //! [residua-cesu8]: https://github.com/residua/cesu8
 //!
+//! # Examples
+//!
+//! Basic usage
+//!
 //! ```
 //! use std::borrow::Cow;
 //! use mutf8::{to_mutf8, from_mutf8};
@@ -19,7 +23,7 @@
 //! let mutf8_data = &[0xED, 0xA0, 0x81, 0xED, 0xB0, 0x81];
 //! // 'mutf8_data' is a byte slice containing a 6-byte surrogate pair which
 //! // becomes a 4-byte UTF-8 character.
-//! assert_eq!(from_mutf8(mutf8_data), Ok(Cow::<str>::Owned(str.to_string())));
+//! assert_eq!(from_mutf8(mutf8_data), Ok(Cow::Owned(str.to_string())));
 //!
 //! let str = "\0";
 //! let mutf8_data = &[0xC0, 0x80];
@@ -126,6 +130,8 @@ fn decode_mutf8(bytes: &[u8]) -> Result<String, DecodingError> {
 /// If the string slice's representation in UTF-8 is not equivalent in MUTF-8,
 /// `encode()` encodes the string slice to its MUTF-8 representation as a slice
 /// of bytes.
+///
+/// # Examples
 ///
 /// ```
 /// use std::borrow::Cow;
