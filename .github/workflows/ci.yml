@@ -5,6 +5,11 @@ on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        args:
+          - ""
+          - "--features std"
     steps:
       - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
@@ -13,10 +18,14 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all-features
+          args: --no-default-features ${{ matrix.args }}
   clippy:
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
+    strategy:
+      matrix:
+        args:
+          - ""
+          - "--features std"
     steps:
       - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
@@ -25,7 +34,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --all-features --tests
+          args: --no-default-features ${{ matrix.args }} -- -D warnings
   docs:
     runs-on: ubuntu-latest
     steps:
@@ -37,4 +46,4 @@ jobs:
         with:
           toolchain: nightly
           command: rustdoc
-          args: --all-features -- --cfg doc_cfg
+          args: -- --cfg doc_cfg -D warnings

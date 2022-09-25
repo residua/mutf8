@@ -11,36 +11,41 @@
 //! Basic usage
 //!
 //! ```
-//! use std::borrow::Cow;
-//! use mutf8::{to_mutf8, from_mutf8};
+//! # extern crate alloc;
+//! use alloc::borrow::Cow;
 //!
 //! let str = "Hello, world!";
 //! // 16-bit Unicode characters are the same in UTF-8 and MUTF-8:
-//! assert_eq!(to_mutf8(str), Cow::Borrowed(str.as_bytes()));
-//! assert_eq!(from_mutf8(str.as_bytes()), Ok(Cow::Borrowed(str)));
+//! assert_eq!(mutf8::encode(str), Cow::Borrowed(str.as_bytes()));
+//! assert_eq!(mutf8::decode(str.as_bytes()), Ok(Cow::Borrowed(str)));
 //!
 //! let str = "\u{10401}";
 //! let mutf8_data = &[0xED, 0xA0, 0x81, 0xED, 0xB0, 0x81];
 //! // 'mutf8_data' is a byte slice containing a 6-byte surrogate pair which
 //! // becomes a 4-byte UTF-8 character.
-//! assert_eq!(from_mutf8(mutf8_data), Ok(Cow::Owned(str.to_string())));
+//! assert_eq!(mutf8::decode(mutf8_data), Ok(Cow::Owned(str.to_string())));
 //!
 //! let str = "\0";
-//! let mutf8_data = &[0xC0, 0x80];
+//! let mutf8_data = vec![0xC0, 0x80];
 //! // 'str' is a null character which becomes a two-byte MUTF-8 representation.
-//! assert_eq!(to_mutf8(str), Cow::<[u8]>::Owned(mutf8_data.to_vec()));
+//! assert_eq!(mutf8::encode(str), Cow::<[u8]>::Owned(mutf8_data));
 //! ```
+//! # Features
+//!
+//! - `std` implements `std::error::Error` on `Error`. By default, this feature
+//!   is enabled.
 
 #![deny(clippy::pedantic)]
 
-use std::{borrow::Cow, error::Error, fmt, str::from_utf8};
+extern crate alloc;
 
-use cesu8::{cesu8_len, from_cesu8, is_valid_cesu8, to_cesu8};
+use alloc::{borrow::Cow, str::from_utf8, string::String, vec::Vec};
+use core::fmt;
 
 /// Converts a slice of bytes to a string slice.
 ///
 /// First, if the slice of bytes is already valid UTF-8, this function is
-/// functionally no different than `std::str::from_utf8`; this means that
+/// functionally no different than [`std::str::from_utf8`]; this means that
 /// `decode()` does not need to perform any further operations and doesn't need
 /// to allocate additional memory.
 ///
@@ -49,37 +54,37 @@ use cesu8::{cesu8_len, from_cesu8, is_valid_cesu8, to_cesu8};
 /// decode the bytes given to it and return the newly constructed string slice.
 ///
 /// If the slice of bytes is found not to be valid MUTF-8 data, `decode()`
-/// returns `Err(DecodingError)` to signify that an error has occured.
+/// returns `Err(Error)` to signify that an error has occurred.
 ///
 /// # Errors
 ///
-/// Returns [`DecodingError`] if the input is invalid MUTF-8 data.
+/// Returns [`Error`] if the input is invalid MUTF-8 data.
 ///
 /// # Examples
 ///
 /// ```
-/// use std::borrow::Cow;
-/// use mutf8::from_mutf8;
+/// # extern crate alloc;
+/// use alloc::borrow::Cow;
 ///
 /// let str = "Hello, world!";
 /// // Since 'str' contains valid UTF-8 and MUTF-8 data, 'from_mutf8' can
 /// // decode the string slice without allocating memory.
-/// assert_eq!(from_mutf8(str.as_bytes()), Ok(Cow::Borrowed(str)));
+/// assert_eq!(mutf8::decode(str.as_bytes()), Ok(Cow::Borrowed(str)));
 ///
 /// let str = "\u{10401}";
 /// let mutf8_data = &[0xED, 0xA0, 0x81, 0xED, 0xB0, 0x81];
 /// // 'mutf8_data' is a byte slice containing a 6-byte surrogate pair which
 /// // becomes the 4-byte UTF-8 character 'str'.
-/// assert_eq!(from_mutf8(mutf8_data), Ok(Cow::Owned(str.to_string())));
+/// assert_eq!(mutf8::decode(mutf8_data), Ok(Cow::Owned(str.to_string())));
 ///
 /// let str = "\0";
 /// let mutf8_data = &[0xC0, 0x80];
 /// // 'mutf8_data' is a byte slice containing MUTF-8 data containing a null
 /// // code point which becomes a null character.
-/// assert_eq!(from_mutf8(mutf8_data), Ok(Cow::Owned(str.to_string())));
+/// assert_eq!(mutf8::decode(mutf8_data), Ok(Cow::Owned(str.to_string())));
 /// ```
 #[inline]
-pub fn from_mutf8(bytes: &[u8]) -> Result<Cow<str>, DecodingError> {
+pub fn decode(bytes: &[u8]) -> Result<Cow<str>, Error> {
     from_utf8(bytes)
         .map(Cow::Borrowed)
         .or_else(|_| decode_mutf8(bytes).map(Cow::Owned))
@@ -87,10 +92,10 @@ pub fn from_mutf8(bytes: &[u8]) -> Result<Cow<str>, DecodingError> {
 
 #[inline(never)]
 #[cold]
-fn decode_mutf8(bytes: &[u8]) -> Result<String, DecodingError> {
+fn decode_mutf8(bytes: &[u8]) -> Result<String, Error> {
     macro_rules! err {
         () => {{
-            return Err(DecodingError);
+            return Err(Error);
         }};
     }
 
@@ -114,7 +119,7 @@ fn decode_mutf8(bytes: &[u8]) -> Result<String, DecodingError> {
         decoded.push(value);
     }
 
-    from_cesu8(&decoded)
+    cesu8::decode(&decoded)
         .map(Cow::into_owned)
         .map_err(From::from)
 }
@@ -134,30 +139,30 @@ fn decode_mutf8(bytes: &[u8]) -> Result<String, DecodingError> {
 /// # Examples
 ///
 /// ```
-/// use std::borrow::Cow;
-/// use mutf8::to_mutf8;
+/// # extern crate alloc;
+/// use alloc::borrow::Cow;
 ///
 /// let str = "Hello, world!";
 /// // Since 'str' contains valid UTF-8 and MUTF-8 data, 'to_mutf8' can
 /// // encode data without allocating memory.
-/// assert_eq!(to_mutf8(str), Cow::Borrowed(str.as_bytes()));
+/// assert_eq!(mutf8::encode(str), Cow::Borrowed(str.as_bytes()));
 ///
 /// let str = "\u{10401}";
-/// let mutf8_data = Cow::Borrowed(&[0xED, 0xA0, 0x81, 0xED, 0xB0, 0x81]);
+/// let mutf8_data = vec![0xED, 0xA0, 0x81, 0xED, 0xB0, 0x81];
 /// // 'str' is a 4-byte UTF-8 character, which becomes the 6-byte MUTF-8
 /// // surrogate pair 'mutf8_data'.
-/// assert_eq!(to_mutf8(str), mutf8_data);
+/// assert_eq!(mutf8::encode(str), Cow::<[u8]>::Owned(mutf8_data));
 ///
 /// let str = "\0";
-/// let mutf8_data = Cow::Borrowed(&[0xC0, 0x80]);
+/// let mutf8_data = vec![0xC0, 0x80];
 /// // 'str' is a null character which becomes a two byte representation in
 /// // MUTF-8.
-/// assert_eq!(to_mutf8(str), mutf8_data);
+/// assert_eq!(mutf8::encode(str), Cow::<[u8]>::Owned(mutf8_data));
 /// ```
 #[must_use]
 #[inline]
-pub fn to_mutf8(s: &str) -> Cow<[u8]> {
-    if is_valid_mutf8(s) {
+pub fn encode(s: &str) -> Cow<[u8]> {
+    if is_valid(s) {
         Cow::Borrowed(s.as_bytes())
     } else {
         Cow::Owned(encode_mutf8(s))
@@ -168,9 +173,9 @@ pub fn to_mutf8(s: &str) -> Cow<[u8]> {
 #[inline(never)]
 #[cold]
 fn encode_mutf8(s: &str) -> Vec<u8> {
-    let mut encoded = Vec::with_capacity(mutf8_len(s));
+    let mut encoded = Vec::with_capacity(len(s));
 
-    for &byte in to_cesu8(s).iter() {
+    for &byte in cesu8::encode(s).iter() {
         if byte == NULL_CODE_POINT {
             encoded.extend_from_slice(&NULL_PAIR);
         } else {
@@ -187,8 +192,8 @@ const NULL_PAIR: [u8; 2] = [0xC0, 0x80];
 /// Given a string slice, this function returns how many bytes in MUTF-8 are
 /// required to encode the string slice.
 #[must_use]
-pub fn mutf8_len(s: &str) -> usize {
-    let mut len = cesu8_len(s);
+pub fn len(s: &str) -> usize {
+    let mut len = cesu8::len(s);
     s.as_bytes().iter().for_each(|&b| {
         if b == NULL_CODE_POINT {
             len += 1;
@@ -199,9 +204,9 @@ pub fn mutf8_len(s: &str) -> usize {
 
 /// Returns `true` if a string slice contains UTF-8 data that is also valid
 /// MUTF-8. This is mainly used in testing if a string slice needs to be
-/// explicitly encoded using [`to_mutf8`].
+/// explicitly encoded using [`encode`].
 ///
-/// If `is_valid_mutf8()` returns `false`, it implies that
+/// If `is_valid()` returns `false`, it implies that
 /// [`&str.as_bytes()`](str::as_bytes) is directly equivalent to the string
 /// slice's MUTF-8 representation.
 ///
@@ -210,45 +215,45 @@ pub fn mutf8_len(s: &str) -> usize {
 /// Basic usage:
 ///
 /// ```
-/// use mutf8::is_valid_mutf8;
-///
 /// // Code points below U+10400 encoded in UTF-8 IS valid MUTF-8.
-/// assert!(is_valid_mutf8("Hello, world!"));
+/// assert!(mutf8::is_valid("Hello, world!"));
 ///
 /// // Any code point above U+10400 encoded in UTF-8 IS NOT valid MUTF-8.
-/// assert!(!is_valid_mutf8("\u{10400}"));
+/// assert!(!mutf8::is_valid("\u{10400}"));
 ///
 /// // The use of a null character IS NOT valid MUTF-8.
-/// assert!(!is_valid_mutf8("\0"));
+/// assert!(!mutf8::is_valid("\0"));
 /// ```
 #[must_use]
 #[inline]
-pub fn is_valid_mutf8(s: &str) -> bool {
-    !s.contains(NULL_CHAR) && is_valid_cesu8(s)
+pub fn is_valid(s: &str) -> bool {
+    !s.contains(NULL_CHAR) && cesu8::is_valid(s)
 }
 
 const NULL_CODE_POINT: u8 = 0x00;
 const NULL_CHAR: char = '\0';
 
-/// An error thrown by [`from_mutf8`] when the input is invalid MUTF-8 data.
+/// An error thrown by [`decode`] when the input is invalid MUTF-8 data.
 ///
 /// This type does not support transmission of an error other than that an error
 /// occurred.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct DecodingError;
+pub struct Error;
 
-impl fmt::Display for DecodingError {
+impl fmt::Display for Error {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("invalid MUTF-8 data")
     }
 }
 
-impl From<cesu8::DecodingError> for DecodingError {
+impl From<cesu8::Error> for Error {
     #[inline]
-    fn from(_: cesu8::DecodingError) -> Self {
-        DecodingError
+    fn from(_: cesu8::Error) -> Self {
+        Error
     }
 }
 
-impl Error for DecodingError {}
+#[cfg(feature = "std")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "std")))]
+impl std::error::Error for Error {}
